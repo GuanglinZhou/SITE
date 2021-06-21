@@ -4,9 +4,6 @@ from simi_ite.propensity import *
 import math
 from scipy.spatial.distance import cdist
 from scipy.stats import entropy
-import matplotlib.pyplot as plt
-from sklearn.manifold import TSNE
-import random
 
 
 
