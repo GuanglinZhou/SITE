@@ -45,7 +45,7 @@ tf.app.flags.DEFINE_integer('use_p_correction', 1, """Whether to use population 
 tf.app.flags.DEFINE_string('optimizer', 'RMSProp', """Which optimizer to use. (RMSProp/Adagrad/GradientDescent/Adam)""")
 tf.app.flags.DEFINE_string('imb_fun', 'mmd_lin',
                            """Which imbalance penalty to use (mmd_lin/mmd_rbf/mmd2_lin/mmd2_rbf/lindisc/wass). """)
-tf.app.flags.DEFINE_integer('output_csv', 0, """Whether to save a CSV file with the results_try1""")
+tf.app.flags.DEFINE_integer('output_csv', 1, """Whether to save a CSV file with the results_try1""")
 tf.app.flags.DEFINE_integer('output_delay', 100, """Number of iterations between log/loss outputs. """)
 tf.app.flags.DEFINE_integer('pred_output_delay', -1,
                             """Number of iterations between prediction outputs. (-1 gives no intermediate output). """)
