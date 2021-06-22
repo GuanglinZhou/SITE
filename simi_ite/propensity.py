@@ -42,7 +42,7 @@ def propensity_score_training(data, label, mode):
         prob_all = clf.predict_proba(data)
 
         result_all = clf.predict(data)
-        pdb.set_trace()
+        # pdb.set_trace()
 
         return prob_all, clf
     if mode == 'SVM':

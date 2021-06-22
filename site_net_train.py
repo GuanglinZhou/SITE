@@ -426,7 +426,7 @@ def run(outdir):
             test_data_exp = dict()
             if npz_input:
                 train_data_exp = dict()
-                pdb.set_trace()
+                # pdb.set_trace()
                 train_data_exp['x'] = train_data['x'][:, :, i_exp - 1]
                 train_data_exp['t'] = train_data['t'][:, i_exp - 1:i_exp]
                 train_data_exp['yf'] = train_data['yf'][:, i_exp - 1:i_exp]
