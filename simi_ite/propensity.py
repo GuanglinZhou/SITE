@@ -6,7 +6,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, f1_score
 from sklearn import tree
 import cPickle
-
+import pdb
 
 def propensity_score_training(data, label, mode):
     '''
@@ -40,7 +40,9 @@ def propensity_score_training(data, label, mode):
         acc_eva = accuracy_score(eva_t, pred_eva)
 
         prob_all = clf.predict_proba(data)
+
         result_all = clf.predict(data)
+        pdb.set_trace()
 
         return prob_all, clf
     if mode == 'SVM':

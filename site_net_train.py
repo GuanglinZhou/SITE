@@ -90,41 +90,48 @@ def three_pair_extration(x, t, yf, propensity_dir):
     return three_pairs, I_three_pairs, t_three_pairs, y_three_pairs, three_pairs_simi
 
 
-def train(SITE, sess, train_step, D, I_valid, D_test, logfile, i_exp):
+def train(site_net, sess, train_step, train_data, I_valid, test_data, logfile, i_exp):
     """ Trains the model on supplied data """
 
     ''' Train/validation split '''
-    n = D['x'].shape[0]
-    I = range(n);
+    n = train_data['x'].shape[0]
+    I = range(n)
     I_train = list(set(I) - set(I_valid))
     n_train = len(I_train)
 
     ''' Compute treatment probability'''
-    p_treated = np.mean(D['t'][I_train, :])
+    p_treated = np.mean(train_data['t'][I_train, :])
 
     ''' Set up loss feed_dicts'''
     three_pairs_train, _, _, _, three_pairs_simi_train = three_pair_extration(
-        D['x'][I_train, :], D['t'][I_train, :], D['yf'][I_train, :], FLAGS.propensity_dir)
+        train_data['x'][I_train, :], train_data['t'][I_train, :], train_data['yf'][I_train, :], FLAGS.propensity_dir)
 
-    dict_factual = {SITE.x: D['x'][I_train, :], SITE.t: D['t'][I_train, :], SITE.y_: D['yf'][I_train, :],
-                    SITE.do_in: 1.0, SITE.do_out: 1.0, SITE.r_lambda: FLAGS.p_lambda, SITE.p_t: p_treated,
-                    SITE.three_pairs: three_pairs_train, SITE.three_pairs_simi: three_pairs_simi_train,
-                    SITE.r_mid_point_mini: FLAGS.p_mid_point_mini, SITE.r_pddm: FLAGS.p_pddm}
-
+    dict_factual = {site_net.x: train_data['x'][I_train, :], site_net.t: train_data['t'][I_train, :],
+                    site_net.y_: train_data['yf'][I_train, :],
+                    site_net.do_in: 1.0, site_net.do_out: 1.0, site_net.r_lambda: FLAGS.p_lambda,
+                    site_net.p_t: p_treated,
+                    site_net.three_pairs: three_pairs_train, site_net.three_pairs_simi: three_pairs_simi_train,
+                    site_net.r_mid_point_mini: FLAGS.p_mid_point_mini, site_net.r_pddm: FLAGS.p_pddm}
+    dict_valid = dict()
     if FLAGS.val_part > 0:
         three_pairs_valid, _, _, _, three_pairs_simi_valid = three_pair_extration(
-            D['x'][I_valid, :], D['t'][I_valid, :], D['yf'][I_valid, :], FLAGS.propensity_dir)
+            train_data['x'][I_valid, :], train_data['t'][I_valid, :], train_data['yf'][I_valid, :],
+            FLAGS.propensity_dir)
 
-        dict_valid = {SITE.x: D['x'][I_valid, :], SITE.t: D['t'][I_valid, :], SITE.y_: D['yf'][I_valid, :],
-                      SITE.do_in: 1.0, SITE.do_out: 1.0, SITE.r_lambda: FLAGS.p_lambda, SITE.p_t: p_treated,
-                      SITE.three_pairs: three_pairs_valid, SITE.three_pairs_simi: three_pairs_simi_valid,
-                      SITE.r_mid_point_mini: FLAGS.p_mid_point_mini, SITE.r_pddm: FLAGS.p_pddm}
+        dict_valid = {site_net.x: train_data['x'][I_valid, :], site_net.t: train_data['t'][I_valid, :],
+                      site_net.y_: train_data['yf'][I_valid, :],
+                      site_net.do_in: 1.0, site_net.do_out: 1.0, site_net.r_lambda: FLAGS.p_lambda,
+                      site_net.p_t: p_treated,
+                      site_net.three_pairs: three_pairs_valid, site_net.three_pairs_simi: three_pairs_simi_valid,
+                      site_net.r_mid_point_mini: FLAGS.p_mid_point_mini, site_net.r_pddm: FLAGS.p_pddm}
 
-    if D['HAVE_TRUTH']:
-        dict_cfactual = {SITE.x: D['x'][I_train, :], SITE.t: 1 - D['t'][I_train, :], SITE.y_: D['ycf'][I_train, :],
-                         SITE.do_in: 1.0, SITE.do_out: 1.0, SITE.three_pairs: three_pairs_train,
-                         SITE.three_pairs_simi: three_pairs_simi_train,
-                         SITE.r_mid_point_mini: FLAGS.p_mid_point_mini, SITE.r_pddm: FLAGS.p_pddm}
+    dict_cfactual = dict()
+    if train_data['HAVE_TRUTH']:
+        dict_cfactual = {site_net.x: train_data['x'][I_train, :], site_net.t: 1 - train_data['t'][I_train, :],
+                         site_net.y_: train_data['ycf'][I_train, :],
+                         site_net.do_in: 1.0, site_net.do_out: 1.0, site_net.three_pairs: three_pairs_train,
+                         site_net.three_pairs_simi: three_pairs_simi_train,
+                         site_net.r_mid_point_mini: FLAGS.p_mid_point_mini, site_net.r_pddm: FLAGS.p_pddm}
 
     ''' Initialize TensorFlow variables '''
     sess.run(tf.global_variables_initializer())
@@ -136,18 +143,18 @@ def train(SITE, sess, train_step, D, I_valid, D_test, logfile, i_exp):
     ''' Compute losses '''
     losses = []
     obj_loss, f_error, pddm_loss_batch, mid_dist_batch = sess.run(
-        [SITE.tot_loss, SITE.pred_loss, SITE.pddm_loss, SITE.mid_distance], \
+        [site_net.tot_loss, site_net.pred_loss, site_net.pddm_loss, site_net.mid_distance],
         feed_dict=dict_factual)
 
     cf_error = np.nan
-    if D['HAVE_TRUTH']:
-        cf_error = sess.run(SITE.pred_loss, feed_dict=dict_cfactual)
+    if train_data['HAVE_TRUTH']:
+        cf_error = sess.run(site_net.pred_loss, feed_dict=dict_cfactual)
 
-    valid_obj = np.nan;
-    valid_imb = np.nan;
-    valid_f_error = np.nan;
+    valid_obj = np.nan
+    valid_imb = np.nan
+    valid_f_error = np.nan
     if FLAGS.val_part > 0:
-        valid_obj, valid_f_error = sess.run([SITE.tot_loss, SITE.pred_loss], \
+        valid_obj, valid_f_error = sess.run([site_net.tot_loss, site_net.pred_loss],
                                             feed_dict=dict_valid)
 
     losses.append([obj_loss, f_error, cf_error, valid_f_error, valid_obj])
@@ -162,15 +169,16 @@ def train(SITE, sess, train_step, D, I_valid, D_test, logfile, i_exp):
 
         ''' Fetch sample '''
         t_index = 0
+        # todo why t_index range???
         while t_index < 0.05 or t_index > 0.95:
             I = random.sample(range(0, n_train), FLAGS.batch_size)
-            x_batch = D['x'][I_train, :][I, :]
-            t_batch = D['t'][I_train, :][I]
-            y_batch = D['yf'][I_train, :][I]
+            x_batch = train_data['x'][I_train, :][I, :]
+            t_batch = train_data['t'][I_train, :][I]
+            y_batch = train_data['yf'][I_train, :][I]
             t_index = np.mean(t_batch)
 
         if __DEBUG__:
-            M = sess.run(site.pop_dist(SITE.x, SITE.t), feed_dict={SITE.x: x_batch, SITE.t: t_batch})
+            M = sess.run(site.pop_dist(site_net.x, site_net.t), feed_dict={site_net.x: x_batch, site_net.t: t_batch})
             log(logfile, 'Median: %.4g, Mean: %.4f, Max: %.4f' % (
                 np.median(M.tolist()), np.mean(M.tolist()), np.amax(M.tolist())))
 
@@ -180,38 +188,38 @@ def train(SITE, sess, train_step, D, I_valid, D_test, logfile, i_exp):
             three_pairs_batch, _, _, _, three_pairs_simi = three_pair_extration(
                 x_batch, t_batch, y_batch, FLAGS.propensity_dir)
 
-            sess.run(train_step, feed_dict={SITE.x: x_batch, SITE.t: t_batch, SITE.y_: y_batch,
-                                            SITE.do_in: FLAGS.dropout_in, SITE.do_out: FLAGS.dropout_out,
-                                            SITE.r_lambda: FLAGS.p_lambda, SITE.p_t: p_treated,
-                                            SITE.three_pairs: three_pairs_batch,
-                                            SITE.three_pairs_simi: three_pairs_simi,
-                                            SITE.r_mid_point_mini: FLAGS.p_mid_point_mini,
-                                            SITE.r_pddm: FLAGS.p_pddm})
+            sess.run(train_step, feed_dict={site_net.x: x_batch, site_net.t: t_batch, site_net.y_: y_batch,
+                                            site_net.do_in: FLAGS.dropout_in, site_net.do_out: FLAGS.dropout_out,
+                                            site_net.r_lambda: FLAGS.p_lambda, site_net.p_t: p_treated,
+                                            site_net.three_pairs: three_pairs_batch,
+                                            site_net.three_pairs_simi: three_pairs_simi,
+                                            site_net.r_mid_point_mini: FLAGS.p_mid_point_mini,
+                                            site_net.r_pddm: FLAGS.p_pddm})
 
         ''' Project variable selection weights '''
         if FLAGS.varsel:
-            wip = simplex_project(sess.run(SITE.weights_in[0]), 1)
-            sess.run(SITE.projection, feed_dict={SITE.w_proj: wip})
+            wip = simplex_project(sess.run(site_net.weights_in[0]), 1)
+            sess.run(site_net.projection, feed_dict={site_net.w_proj: wip})
 
         ''' Compute loss every N iterations '''
         if i % FLAGS.output_delay == 0 or i == FLAGS.iterations - 1:
             obj_loss, f_error, pddm_loss_batch, mid_dist_batch = sess.run(
-                [SITE.tot_loss, SITE.pred_loss, SITE.pddm_loss, SITE.mid_distance],
+                [site_net.tot_loss, site_net.pred_loss, site_net.pddm_loss, site_net.mid_distance],
                 feed_dict=dict_factual)
 
-            rep = sess.run(SITE.h_rep_norm, feed_dict={SITE.x: D['x'], SITE.do_in: 1.0})
+            rep = sess.run(site_net.h_rep_norm, feed_dict={site_net.x: train_data['x'], site_net.do_in: 1.0})
             rep_norm = np.mean(np.sqrt(np.sum(np.square(rep), 1)))
             # print rep
 
             cf_error = np.nan
-            if D['HAVE_TRUTH']:
-                cf_error = sess.run(SITE.pred_loss, feed_dict=dict_cfactual)
+            if train_data['HAVE_TRUTH']:
+                cf_error = sess.run(site_net.pred_loss, feed_dict=dict_cfactual)
 
-            valid_obj = np.nan;
-            valid_imb = np.nan;
-            valid_f_error = np.nan;
+            valid_obj = np.nan
+            valid_imb = np.nan
+            valid_f_error = np.nan
             if FLAGS.val_part > 0:
-                valid_obj, valid_f_error = sess.run([SITE.tot_loss, SITE.pred_loss], feed_dict=dict_valid)
+                valid_obj, valid_f_error = sess.run([site_net.tot_loss, site_net.pred_loss], feed_dict=dict_valid)
 
             losses.append([obj_loss, f_error, cf_error, valid_f_error, valid_obj])
 
@@ -219,8 +227,9 @@ def train(SITE, sess, train_step, D, I_valid, D_test, logfile, i_exp):
                        % (obj_loss, f_error, cf_error, pddm_loss_batch, mid_dist_batch, valid_f_error, valid_obj)
 
             if FLAGS.loss == 'log':
-                y_pred = sess.run(SITE.output, feed_dict={SITE.x: x_batch, \
-                                                          SITE.t: t_batch, SITE.do_in: 1.0, SITE.do_out: 1.0})
+                y_pred = sess.run(site_net.output, feed_dict={site_net.x: x_batch, \
+                                                              site_net.t: t_batch, site_net.do_in: 1.0,
+                                                              site_net.do_out: 1.0})
                 y_pred = 1.0 * (y_pred > 0.5)
                 acc = 100 * (1 - np.mean(np.abs(y_batch - y_pred)))
                 loss_str += ',\tAcc: %.2f%%' % acc
@@ -234,29 +243,32 @@ def train(SITE, sess, train_step, D, I_valid, D_test, logfile, i_exp):
         ''' Compute predictions every M iterations '''
         if (FLAGS.pred_output_delay > 0 and i % FLAGS.pred_output_delay == 0) or i == FLAGS.iterations - 1:
 
-            y_pred_f = sess.run(SITE.output, feed_dict={SITE.x: D['x'], \
-                                                        SITE.t: D['t'], SITE.do_in: 1.0, SITE.do_out: 1.0})
-            y_pred_cf = sess.run(SITE.output, feed_dict={SITE.x: D['x'], \
-                                                         SITE.t: 1 - D['t'], SITE.do_in: 1.0, SITE.do_out: 1.0})
+            y_pred_f = sess.run(site_net.output, feed_dict={site_net.x: train_data['x'],
+                                                            site_net.t: train_data['t'], site_net.do_in: 1.0,
+                                                            site_net.do_out: 1.0})
+            y_pred_cf = sess.run(site_net.output, feed_dict={site_net.x: train_data['x'],
+                                                             site_net.t: 1 - train_data['t'], site_net.do_in: 1.0,
+                                                             site_net.do_out: 1.0})
             preds_train.append(np.concatenate((y_pred_f, y_pred_cf), axis=1))
 
-            if D_test is not None:
-                y_pred_f_test = sess.run(SITE.output, feed_dict={SITE.x: D_test['x'], \
-                                                                 SITE.t: D_test['t'], SITE.do_in: 1.0,
-                                                                 SITE.do_out: 1.0})
-                y_pred_cf_test = sess.run(SITE.output, feed_dict={SITE.x: D_test['x'], \
-                                                                  SITE.t: 1 - D_test['t'], SITE.do_in: 1.0,
-                                                                  SITE.do_out: 1.0})
+            if test_data is not None:
+                y_pred_f_test = sess.run(site_net.output, feed_dict={site_net.x: test_data['x'],
+                                                                     site_net.t: test_data['t'], site_net.do_in: 1.0,
+                                                                     site_net.do_out: 1.0})
+                y_pred_cf_test = sess.run(site_net.output, feed_dict={site_net.x: test_data['x'],
+                                                                      site_net.t: 1 - test_data['t'],
+                                                                      site_net.do_in: 1.0,
+                                                                      site_net.do_out: 1.0})
                 preds_test.append(np.concatenate((y_pred_f_test, y_pred_cf_test), axis=1))
 
             if FLAGS.save_rep and i_exp == 1:
-                reps_i = sess.run([SITE.h_rep], feed_dict={SITE.x: D['x'], \
-                                                           SITE.do_in: 1.0, SITE.do_out: 0.0})
+                reps_i = sess.run([site_net.h_rep], feed_dict={site_net.x: train_data['x'],
+                                                               site_net.do_in: 1.0, site_net.do_out: 0.0})
                 reps.append(reps_i)
 
-                if D_test is not None:
-                    reps_test_i = sess.run([SITE.h_rep], feed_dict={SITE.x: D_test['x'], \
-                                                                    SITE.do_in: 1.0, SITE.do_out: 0.0})
+                if test_data is not None:
+                    reps_test_i = sess.run([site_net.h_rep], feed_dict={site_net.x: test_data['x'],
+                                                                        site_net.do_in: 1.0, site_net.do_out: 0.0})
                     reps_test.append(reps_test_i)
 
     return losses, preds_train, preds_test, reps, reps_test
@@ -296,6 +308,7 @@ def run(outdir):
 
     ''' Load Data '''
     npz_input = False
+    datapath_test = None
     if dataform[-3:] == 'npz':
         npz_input = True
     if npz_input:
@@ -310,12 +323,13 @@ def run(outdir):
     log(logfile, 'Training data: ' + datapath)
     if has_test:
         log(logfile, 'Test data:     ' + datapath_test)
-    D = load_data(datapath)
-    D_test = None
+    # load train data
+    train_data = load_data(datapath)
+    test_data = None
     if has_test:
-        D_test = load_data(datapath_test)
+        test_data = load_data(datapath_test)
 
-    log(logfile, 'Loaded data with shape [%d,%d]' % (D['n'], D['dim']))
+    log(logfile, 'Loaded data with shape [%d,%d]' % (train_data['n'], train_data['dim']))
 
     ''' Start Session '''
     config = tf.ConfigProto()
@@ -324,14 +338,15 @@ def run(outdir):
     sess = tf.Session(config=config)
 
     ''' Initialize input placeholders '''
-    x = tf.placeholder("float", shape=[None, D['dim']], name='x')  # Features
-    t = tf.placeholder("float", shape=[None, 1], name='t')  # Treatent
+    x = tf.placeholder("float", shape=[None, train_data['dim']], name='x')  # Features
+    t = tf.placeholder("float", shape=[None, 1], name='t')  # Treatment
     y_ = tf.placeholder("float", shape=[None, 1], name='y_')  # Outcome
 
-    # the pre-treatment covariates of selected three pairs
-    three_pairs = tf.placeholder("float", shape=[6, D['dim']], name='three_pairs')
+    # the pre-treatment co-variates of selected three pairs
+    three_pairs = tf.placeholder("float", shape=[6, train_data['dim']], name='three_pairs')
 
     # the similarity score of selected three pairs (ground truth similarity)
+    # todo why shape[0] is 5
     three_pairs_simi = tf.placeholder("float", shape=[5, 1], name='three_pairs_simi')
 
     ''' Parameter placeholders '''
@@ -349,13 +364,14 @@ def run(outdir):
 
     ''' Define model graph '''
     log(logfile, 'Defining graph...\n')
-    dims = [D['dim'], FLAGS.dim_in, FLAGS.dim_out, int(FLAGS.dim_pddm), int(FLAGS.dim_c), int(FLAGS.dim_s)]
-    SITE = site.site_net(x, t, y_, p, FLAGS, r_lambda, do_in, do_out, dims, three_pairs, three_pairs_simi,
-                         r_mid_point_mini, r_pddm)
+    # dims = [25, 200, 100, 200, 200, 100]
+    dims = [train_data['dim'], FLAGS.dim_in, FLAGS.dim_out, int(FLAGS.dim_pddm), int(FLAGS.dim_c), int(FLAGS.dim_s)]
+    site_net = site.SiteNet(x, t, y_, p, FLAGS, r_lambda, do_in, do_out, dims, three_pairs, three_pairs_simi,
+                            r_mid_point_mini, r_pddm)
 
     ''' Set up optimizer '''
     global_step = tf.Variable(0, trainable=False)
-    lr = tf.train.exponential_decay(FLAGS.lrate, global_step, \
+    lr = tf.train.exponential_decay(FLAGS.lrate, global_step,
                                     NUM_ITERATIONS_PER_DECAY, FLAGS.lrate_decay, staircase=True)
 
     opt = None
@@ -369,11 +385,11 @@ def run(outdir):
         opt = tf.train.RMSPropOptimizer(lr, FLAGS.decay)
 
     ''' Unused gradient clipping '''
-    # gvs = opt.compute_gradients(SITE.tot_loss)
+    # gvs = opt.compute_gradients(site_net.tot_loss)
     # capped_gvs = [(tf.clip_by_value(grad, -1.0, 1.0), var) for grad, var in gvs]
     # train_step = opt.apply_gradients(capped_gvs, global_step=global_step)
 
-    train_step = opt.minimize(SITE.tot_loss, global_step=global_step)
+    train_step = opt.minimize(site_net.tot_loss, global_step=global_step)
 
     ''' Set up for saving variables '''
     all_losses = []
@@ -407,58 +423,61 @@ def run(outdir):
         ''' Load Data (if multiple repetitions, reuse first set)'''
 
         if i_exp == 1 or FLAGS.experiments > 1:
-            D_exp_test = None
+            test_data_exp = dict()
             if npz_input:
-                D_exp = {}
-                D_exp['x'] = D['x'][:, :, i_exp - 1]
-                D_exp['t'] = D['t'][:, i_exp - 1:i_exp]
-                D_exp['yf'] = D['yf'][:, i_exp - 1:i_exp]
-                if D['HAVE_TRUTH']:
-                    D_exp['ycf'] = D['ycf'][:, i_exp - 1:i_exp]
+                train_data_exp = dict()
+                pdb.set_trace()
+                train_data_exp['x'] = train_data['x'][:, :, i_exp - 1]
+                train_data_exp['t'] = train_data['t'][:, i_exp - 1:i_exp]
+                train_data_exp['yf'] = train_data['yf'][:, i_exp - 1:i_exp]
+                if train_data['HAVE_TRUTH']:
+                    train_data_exp['ycf'] = train_data['ycf'][:, i_exp - 1:i_exp]
                 else:
-                    D_exp['ycf'] = None
+                    train_data_exp['ycf'] = None
 
                 if has_test:
-                    D_exp_test = {}
-                    D_exp_test['x'] = D_test['x'][:, :, i_exp - 1]
-                    D_exp_test['t'] = D_test['t'][:, i_exp - 1:i_exp]
-                    D_exp_test['yf'] = D_test['yf'][:, i_exp - 1:i_exp]
-                    if D_test['HAVE_TRUTH']:
-                        D_exp_test['ycf'] = D_test['ycf'][:, i_exp - 1:i_exp]
+                    test_data_exp = {}
+                    test_data_exp['x'] = test_data['x'][:, :, i_exp - 1]
+                    test_data_exp['t'] = test_data['t'][:, i_exp - 1:i_exp]
+                    test_data_exp['yf'] = test_data['yf'][:, i_exp - 1:i_exp]
+                    if test_data['HAVE_TRUTH']:
+                        test_data_exp['ycf'] = test_data['ycf'][:, i_exp - 1:i_exp]
                     else:
-                        D_exp_test['ycf'] = None
+                        test_data_exp['ycf'] = None
             else:
                 datapath = dataform % i_exp
-                D_exp = load_data(datapath)
+                train_data_exp = load_data(datapath)
                 if has_test:
                     datapath_test = dataform_test % i_exp
-                    D_exp_test = load_data(datapath_test)
+                    test_data_exp = load_data(datapath_test)
 
-            D_exp['HAVE_TRUTH'] = D['HAVE_TRUTH']
+            train_data_exp['HAVE_TRUTH'] = train_data['HAVE_TRUTH']
             if has_test:
-                D_exp_test['HAVE_TRUTH'] = D_test['HAVE_TRUTH']
+                test_data_exp['HAVE_TRUTH'] = test_data['HAVE_TRUTH']
 
         ''' Split into training and validation sets '''
+        """
         if FLAGS.equal_sample > 0:
-            index_y_c_0 = np.intersect1d(np.where(D_exp['t'] < 1), np.where(D_exp['yf'] < 1))
-            index_y_c_1 = np.intersect1d(np.where(D_exp['t'] < 1), np.where(D_exp['yf'] > 0))
-            index_y_t_0 = np.intersect1d(np.where(D_exp['t'] > 0), np.where(D_exp['yf'] < 1))
-            index_y_t_1 = np.intersect1d(np.where(D_exp['t'] > 0), np.where(D_exp['yf'] > 0))
+            index_y_c_0 = np.intersect1d(np.where(train_data_exp['t'] < 1), np.where(train_data_exp['yf'] < 1))
+            index_y_c_1 = np.intersect1d(np.where(train_data_exp['t'] < 1), np.where(train_data_exp['yf'] > 0))
+            index_y_t_0 = np.intersect1d(np.where(train_data_exp['t'] > 0), np.where(train_data_exp['yf'] < 1))
+            index_y_t_1 = np.intersect1d(np.where(train_data_exp['t'] > 0), np.where(train_data_exp['yf'] > 0))
 
-            I_train_c_0, I_valid_c_0 = validation_split_equal(index_y_c_0, FLAGS.val_part)
-            I_train_c_1, I_valid_c_1 = validation_split_equal(index_y_c_1, FLAGS.val_part)
-            I_train_t_0, I_valid_t_0 = validation_split_equal(index_y_t_0, FLAGS.val_part)
-            I_train_t_1, I_valid_t_1 = validation_split_equal(index_y_t_1, FLAGS.val_part)
-            I_valid = index_y_c_0[I_valid_c_0].tolist() + index_y_c_1[I_valid_c_1].tolist() + \
-                      index_y_t_0[I_valid_t_0].tolist() + index_y_t_1[I_valid_t_1].tolist()
+            index_train_c_0, index_valid_c_0 = validation_split_equal(index_y_c_0, FLAGS.val_part)
+            index_train_c_1, index_valid_c_1 = validation_split_equal(index_y_c_1, FLAGS.val_part)
+            index_train_t_0, index_valid_t_0 = validation_split_equal(index_y_t_0, FLAGS.val_part)
+            index_train_t_1, index_valid_t_1 = validation_split_equal(index_y_t_1, FLAGS.val_part)
+            I_valid = index_y_c_0[index_valid_c_0].tolist() + index_y_c_1[index_valid_c_1].tolist() + \
+                      index_y_t_0[index_valid_t_0].tolist() + index_y_t_1[index_valid_t_1].tolist()
         else:
-
-            I_train, I_valid = validation_split(D_exp, FLAGS.val_part)
+        """
+        # trian and valid data index
+        I_train, I_valid = validation_split(train_data_exp, FLAGS.val_part)
 
         ''' Run training loop '''
         losses, preds_train, preds_test, reps, reps_test = \
-            train(SITE, sess, train_step, D_exp, I_valid, \
-                  D_exp_test, logfile, i_exp)
+            train(site_net, sess, train_step, train_data_exp, I_valid,
+                  test_data_exp, logfile, i_exp)
 
         ''' Collect all reps '''
         all_preds_train.append(preds_train)
@@ -481,11 +500,11 @@ def run(outdir):
         ''' Compute weights if doing variable selection '''
         if FLAGS.varsel:
             if i_exp == 1:
-                all_weights = sess.run(SITE.weights_in[0])
-                all_beta = sess.run(SITE.weights_pred)
+                all_weights = sess.run(site_net.weights_in[0])
+                all_beta = sess.run(site_net.weights_pred)
             else:
-                all_weights = np.dstack((all_weights, sess.run(SITE.weights_in[0])))
-                all_beta = np.dstack((all_beta, sess.run(SITE.weights_pred)))
+                all_weights = np.dstack((all_weights, sess.run(site_net.weights_in[0])))
+                all_beta = np.dstack((all_beta, sess.run(site_net.weights_pred)))
 
         ''' Save results_try1 and predictions '''
         all_valid.append(I_valid)
